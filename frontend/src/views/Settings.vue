@@ -330,8 +330,7 @@
                       </div>
                       <div class="column is-3">
                         <b-field label="Retries" label-position="on-border"
-                          message="The number of times a message should be retried
-                                  if sending fails.">
+                          message="Number of times to rety when a message fails.">
                           <b-numberinput v-model="item.max_msg_retries" name="max_msg_retries"
                               type="is-light"
                               controls-position="compact"
@@ -378,7 +377,95 @@
 
             <b-button @click="addSMTP" icon-left="plus" type="is-primary">Add new</b-button>
           </b-tab-item><!-- mail servers -->
+
+          <b-tab-item label="Messengers">
+            <div class="items messengers">
+              <div class="block box" v-for="(item, n) in form.messengers" :key="n">
+                <div class="columns">
+                  <div class="column is-2">
+                    <b-field label="Enabled">
+                      <b-switch v-model="item.enabled" name="enabled"
+                          :native-value="true" />
+                    </b-field>
+                    <b-field>
+                      <a @click.prevent="$utils.confirm(null, () => removeMessenger(n))"
+                        href="#" class="is-size-7">
+                        <b-icon icon="trash-can-outline" size="is-small" /> Delete
+                      </a>
+                    </b-field>
+                  </div><!-- first column -->
+
+                  <div class="column" :class="{'disabled': !item.enabled}">
+                    <div class="columns">
+                      <div class="column is-4">
+                        <b-field label="Name" label-position="on-border"
+                          message="eg: my-sms. Alphanumeric / dash.">
+                          <b-input v-model="item.name" name="name"
+                            placeholder='mymessenger' :maxlength="200" />
+                        </b-field>
+                      </div>
+                      <div class="column is-8">
+                        <b-field label="URL" label-position="on-border"
+                          message="Root URL of the Postback server.">
+                          <b-input v-model="item.root_url" name="root_url"
+                            placeholder='https://postback.messenger.net/path' :maxlength="200" />
+                        </b-field>
+                      </div>
+                    </div><!-- host -->
+
+                    <div class="columns">
+                      <div class="column">
+                        <b-field grouped>
+                          <b-field label="Username" label-position="on-border" expanded>
+                            <b-input v-model="item.username" name="username" :maxlength="200" />
+                          </b-field>
+                          <b-field label="Password" label-position="on-border" expanded
+                            message="Enter a value to change.">
+                            <b-input v-model="item.password"
+                              name="password" type="password" placeholder="Enter to change"
+                              :maxlength="200" />
+                          </b-field>
+                        </b-field>
+                      </div>
+                    </div><!-- auth -->
+                    <hr />
+
+                    <div class="columns">
+                      <div class="column is-4">
+                        <b-field label="Max. connections" label-position="on-border"
+                          message="Maximum concurrent connections to the server.">
+                          <b-numberinput v-model="item.max_conns" name="max_conns" type="is-light"
+                              controls-position="compact"
+                              placeholder="25" min="1" max="65535" />
+                        </b-field>
+                      </div>
+                      <div class="column is-4">
+                        <b-field label="Retries" label-position="on-border"
+                          message="Number of times to rety when a message fails.">
+                          <b-numberinput v-model="item.max_msg_retries" name="max_msg_retries"
+                              type="is-light"
+                              controls-position="compact"
+                              placeholder="2" min="1" max="1000" />
+                        </b-field>
+                      </div>
+                      <div class="column is-4">
+                        <b-field label="Request imeout" label-position="on-border"
+                          message="Request timeout duration (s for second, m for minute).">
+                          <b-input v-model="item.timeout" name="timeout"
+                            placeholder="5s" :pattern="regDuration" :maxlength="10" />
+                        </b-field>
+                      </div>
+                    </div>
+                    <hr />
+                  </div>
+                </div><!-- second container column -->
+              </div><!-- block -->
+            </div><!-- mail-servers -->
+
+            <b-button @click="addMessenger" icon-left="plus" type="is-primary">Add new</b-button>
+          </b-tab-item><!-- messengers -->
         </b-tabs>
+
       </form>
     </section>
   </section>
@@ -421,6 +508,24 @@ export default Vue.extend({
       this.form.smtp.splice(i, 1, s);
     },
 
+    addMessenger() {
+      this.form.messengers.push({
+        enabled: true,
+        root_url: '',
+        name: '',
+        username: '',
+        password: '',
+        max_conns: 25,
+        max_msg_retries: 2,
+        timeout: '5s',
+      });
+    },
+
+    removeMessenger(i) {
+      this.form.messengers.splice(i, 1);
+    },
+
+
     onSubmit() {
       const form = JSON.parse(JSON.stringify(this.form));
 
@@ -461,6 +566,7 @@ export default Vue.extend({
           this.$api.getHealth().then(() => {
             clearInterval(pollId);
             this.getSettings();
+            this.$reloadServerConfig();
           });
         }, 500);
       }, () => {

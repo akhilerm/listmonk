@@ -22,6 +22,10 @@ import (
 	"github.com/knadh/stuffbin"
 )
 
+const (
+	emailMsgr = "email"
+)
+
 // App contains the "global" components that are
 // passed around, especially through HTTP handlers.
 type App struct {
@@ -31,10 +35,11 @@ type App struct {
 	constants *constants
 	manager   *manager.Manager
 	importer  *subimporter.Importer
-	messenger messenger.Messenger
-	media     media.Store
-	notifTpls *template.Template
-	log       *log.Logger
+	// messenger  messenger.Messenger
+	messengers map[string]messenger.Messenger
+	media      media.Store
+	notifTpls  *template.Template
+	log        *log.Logger
 
 	// Channel for passing reload signals.
 	sigChan chan os.Signal
@@ -122,17 +127,28 @@ func main() {
 	// Initialize the main app controller that wraps all of the app's
 	// components. This is passed around HTTP handlers.
 	app := &App{
-		fs:        fs,
-		db:        db,
-		constants: initConstants(),
-		media:     initMediaStore(),
-		log:       lo,
+		fs:         fs,
+		db:         db,
+		constants:  initConstants(),
+		media:      initMediaStore(),
+		messengers: make(map[string]messenger.Messenger),
+		log:        lo,
 	}
 	_, app.queries = initQueries(queryFilePath, db, fs, true)
 	app.manager = initCampaignManager(app.queries, app.constants, app)
 	app.importer = initImporter(app.queries, db, app)
-	app.messenger = initMessengers(app.manager)
 	app.notifTpls = initNotifTemplates("/email-templates/*.html", fs, app.constants)
+
+	// Initialize the SMTP and Postback messengers.
+	app.messengers[emailMsgr] = initSMTPMessenger(app.manager)
+	for _, m := range initPostbackMessengers(app.manager) {
+		app.messengers[m.Name()] = m
+	}
+
+	// Attach all messengers to the campaign manager.
+	for _, m := range app.messengers {
+		app.manager.AddMessenger(m)
+	}
 
 	// Start the campaign workers. The campaign batches (fetch from DB, push out
 	// messages) get processed at the specified interval.
@@ -164,7 +180,9 @@ func main() {
 		app.db.DB.Close()
 
 		// Close the messenger pool.
-		app.messenger.Close()
+		for _, m := range app.messengers {
+			m.Close()
+		}
 
 		// Signal the close.
 		closerWait <- true
